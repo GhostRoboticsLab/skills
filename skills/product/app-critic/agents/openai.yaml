@@ -1,0 +1,5 @@
+interface:
+  display_name: "App Critic"
+  short_description: "Score the product with evidence, propose stories"
+policy:
+  allow_implicit_invocation: false

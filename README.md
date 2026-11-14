@@ -27,7 +27,7 @@ npx skills@latest add GhostRoboticsLab/skills
 
 Update with `npx skills@latest update`. This route may also offer the beta skills.
 
-As of 0.1.0, the manifests pass `claude plugin validate . --strict` and the plugin installs from a local clone with the shell commands above. The `/plugin` and skills.sh routes are not yet run by us: open an issue if one fails.
+The manifests pass `claude plugin validate . --strict` and the plugin installs from GitHub with the shell commands above. The `/plugin` and skills.sh routes are not yet run by us: open an issue if one fails.
 
 ## Skills
 
@@ -35,7 +35,10 @@ As of 0.1.0, the manifests pass `claude plugin validate . --strict` and the plug
 
 - **[hand-test](./skills/engineering/hand-test/SKILL.md)** ([docs](./docs/engineering/hand-test.md)): Before a change people see, hear or feel ships, show BEFORE and AFTER side by side in one video and one board, and get a person's OK.
 
-**User-invoked**: only you can start these. None yet.
+**User-invoked**: only you can start these.
+
+- **[app-critic](./skills/product/app-critic/SKILL.md)** ([docs](./docs/product/app-critic.md)): Score the whole product on a scorecard, every score with evidence, and turn what it finds into prioritised stories.
+- **[whats-new-clip](./skills/product/whats-new-clip/SKILL.md)** ([docs](./docs/product/whats-new-clip.md)): For each release, cut a short What's New clip from the product's real screens: words first, filmed on the real build, reviewed before a person sees it.
 
 Beta skills are in [skills/in-progress](./skills/in-progress/README.md): public, not in the plugin.
 
@@ -43,7 +46,7 @@ Beta skills are in [skills/in-progress](./skills/in-progress/README.md): public,
 
 ```mermaid
 flowchart LR
-  A["skills/in-progress/<br/>new, unproven"] -- "used in shipped work" --> B["skills/engineering/<br/>docs page with Origin"]
+  A["skills/in-progress/<br/>new, unproven"] -- "used in shipped work" --> B["a shipped bucket<br/>docs page with Origin"]
   B --> C["plugin.json<br/>version bump"]
 ```
 

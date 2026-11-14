@@ -2,13 +2,13 @@
 
 ## The bar
 
-A skill enters `skills/engineering/`, and so the plugin, only when all three hold:
+A skill enters a shipped bucket (`skills/engineering/`, `skills/product/`), and so the plugin, only when all three hold:
 
 1. **Shipped.** It was used in work that shipped. Its docs page has an `## Origin` section saying where it ran and what it caught.
 2. **General.** It holds only what is true in every project. Project facts (paths, devices, commands) live in the project's own notes file, which the skill writes on first use.
 3. **Small.** It does one job and composes with other skills: it calls them by name rather than copying their steps.
 
-New and unproven skills start in `skills/in-progress/`:
+A skill that has not cleared the bar yet starts in `skills/in-progress/`:
 
 ```bash
 bash scripts/new-skill.sh in-progress <name>
@@ -33,6 +33,10 @@ Agents are welcome to draft. You post it, so you own it:
 - **The problem, not the fix.** Describe what went wrong. Leave plans and rewritten `SKILL.md` files for a PR.
 - **These skills only.** Your own project's tickets belong in your project's tracker.
 - **Nothing private.** No names, account ids, internal links or absolute paths from your machine.
+
+## Security
+
+A vulnerability goes through a private report, not an issue: see [SECURITY.md](./SECURITY.md).
 
 ## Pull requests
 
