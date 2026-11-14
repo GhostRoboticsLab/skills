@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Set
 from urllib.parse import unquote
 
 # Buckets whose skills ship in the plugin. Add a bucket here when it is promoted.
-PROMOTED = ("engineering",)
+PROMOTED = ("engineering", "product")
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKETPLACE = ".claude-plugin/marketplace.json"

@@ -8,8 +8,8 @@ Claude Code loads this file through `.claude/CLAUDE.md`. The repo root is also t
 
 | Path | What it holds |
 | --- | --- |
-| `skills/engineering/` | Promoted skills. Each one ships in the plugin. |
-| `skills/in-progress/` | Beta skills. Public, not shipped. Every new skill starts here. |
+| `skills/engineering/`, `skills/product/` | Promoted buckets. Each skill in them ships in the plugin. |
+| `skills/in-progress/` | Beta skills. Public, not shipped. Every unproven skill starts here. |
 | `docs/<bucket>/<name>.md` | The human page for a promoted skill. |
 | `.claude-plugin/plugin.json` | The shipped set (`skills`) and the one copy of the version. |
 | `.claude-plugin/marketplace.json` | This repo as its own marketplace, `ghostlabs`. |
@@ -74,3 +74,5 @@ claude plugin validate . --strict   # after touching .claude-plugin/
 ```
 
 All three green, then fill `.github/pull_request_template.md`, including its Hand test line.
+
+`main` takes changes only through a pull request whose `check` job is green; nobody pushes to it. A release tag and its release are final: a fix ships as a new version.

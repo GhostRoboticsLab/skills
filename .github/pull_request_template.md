@@ -8,7 +8,7 @@
 
 - [ ] `python3 scripts/check.py --base origin/main` is green
 - [ ] `bash scripts/test.sh` is green
-- [ ] A file under `skills/engineering/` changed, so `version` in `.claude-plugin/plugin.json` is bumped and `CHANGELOG.md` has its entry on top (or nothing there changed)
+- [ ] A file under a shipped bucket (`skills/engineering/`, `skills/product/`) changed, so `version` in `.claude-plugin/plugin.json` is bumped and `CHANGELOG.md` has its entry on top (or nothing there changed)
 
 ## Hand test
 

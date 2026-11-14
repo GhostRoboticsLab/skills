@@ -1,0 +1,5 @@
+interface:
+  display_name: "What's New Clip"
+  short_description: "A release's What's New clip from real screens"
+policy:
+  allow_implicit_invocation: false

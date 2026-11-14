@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # Keeps the workflow's pinned actions current. The repo has no other dependencies to track.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
