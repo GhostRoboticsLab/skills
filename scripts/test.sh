@@ -17,5 +17,6 @@ python3 scripts/test_check.py
 find skills -name 'test_*.py' -not -path '*/__pycache__/*' -exec dirname {} \; | sort -u |
   while IFS= read -r dir; do
     echo "-- $dir"
-    python3 -m unittest discover -s "$dir" -p 'test_*.py'
+    # </dev/null: a test that reads its input (ffmpeg does) would eat the rest of this list.
+    python3 -m unittest discover -s "$dir" -p 'test_*.py' </dev/null
   done
