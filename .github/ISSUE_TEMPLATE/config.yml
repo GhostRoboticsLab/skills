@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How a skill gets in
+    url: https://github.com/GhostRoboticsLab/skills/blob/main/CONTRIBUTING.md
+    about: The bar for new skills, and how issues are judged.

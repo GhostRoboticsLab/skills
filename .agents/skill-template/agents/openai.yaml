@@ -1,0 +1,7 @@
+interface:
+  display_name: "{{title}}"
+  short_description: "TODO(new-skill) A few words for the skill picker"
+# User-invoked? Uncomment the two lines below and add
+# disable-model-invocation: true to the SKILL.md frontmatter.
+# policy:
+#   allow_implicit_invocation: false

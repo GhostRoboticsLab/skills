@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.pyc
+# Local agent settings stay local. The shared agent rules load from .claude/CLAUDE.md.
+.claude/*
+!.claude/CLAUDE.md

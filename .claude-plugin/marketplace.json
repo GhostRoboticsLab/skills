@@ -1,0 +1,22 @@
+{
+  "name": "ghostlabs",
+  "owner": {
+    "name": "Ghost Robotics Lab",
+    "url": "https://github.com/GhostRoboticsLab"
+  },
+  "description": "Ghost Robotics Lab's agent skills, as one installable Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "ghostlabs-skills",
+      "source": "./",
+      "description": "Agent skills from Ghost Robotics Lab's own shipped work. Each one helped ship a real app, and works in your project too.",
+      "category": "engineering",
+      "keywords": [
+        "engineering",
+        "skills",
+        "hand-test",
+        "qa"
+      ]
+    }
+  ]
+}

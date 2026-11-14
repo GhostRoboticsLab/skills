@@ -1,0 +1,38 @@
+name: Idea
+description: A change to a skill, or a new skill, grounded in real work. One idea per issue.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A skill ships only when it was used in shipped work, holds nothing specific to one project, and does one job. See [the bar](https://github.com/GhostRoboticsLab/skills/blob/main/CONTRIBUTING.md#the-bar).
+  - type: input
+    id: skill
+    attributes:
+      label: Skill
+      description: The skill this changes, or "new".
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened in real work
+      description: The session or release where the skill fell short, or where a new skill would have caught something. What you ran, what happened, and why it mattered.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+      description: The smallest change that fixes it. Describe it; a rewritten SKILL.md belongs in a PR.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: This issue is about one idea.
+          required: true
+        - label: I searched open and closed issues for a duplicate.
+          required: true
