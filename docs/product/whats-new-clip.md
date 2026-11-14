@@ -24,7 +24,7 @@ flowchart LR
 
 The words come first. The agent turns the release notes into a short caption per change and asks the approver before anything is filmed, keeping their words verbatim wherever they give them. Then it writes the release's spec, films, and renders with one command. Before you see anything, it pulls stills from its own render and checks each one: the scene shows what its caption says, the text fits, nothing private or unfinished is on screen. The clip waits for a person's OK, and the spec stays in the repo, so the next release starts from this one.
 
-The tool is [`clip.py`](../../skills/product/whats-new-clip/scripts/clip.py): `init` writes a spec, `check` names every problem in it (a caption too long to read twice in its scene, a scene too short, more scenes than fit, a missing film, a picture blown up or too small for the frame, low contrast), `render` builds the clip, and `stills` pulls the review stills and a sheet like the one above, tinting the edges a feed covers with its own buttons and captions.
+The tool is [`clip.py`](../../skills/product/whats-new-clip/scripts/clip.py): `init` writes a spec, `check` names every problem in it (a caption too long to read twice in its scene, a scene too short, more scenes than fit, a missing film, a picture blown up or too small for the frame, low contrast), `render` builds the clip, `stills` pulls the review stills and a sheet like the one above, tinting the edges a feed covers with its own buttons and captions, and `peek` shows a film between two of its seconds as `render` will read it, for picking where a scene starts and ends.
 
 ## When to reach for it
 
@@ -81,6 +81,9 @@ Each early miss became a rule in this skill:
 - Cut points found by eye took longest: each step's time is logged as it is filmed.
 - A clip that opened straight on a screen gave its cover nothing to say: an opening card from the first frame, the same question every release, the version under it.
 - A cut into a screen recording landed on the next screen, because the recording had no frames while nothing moved: films are read at a constant frame rate before they are cut.
+- Stills pulled from a film with a plain seek showed a screen seconds away from the one the cut used: `peek` reads a film the way `render` does.
+- A change that needed a camera could not be filmed on a simulator: a kept film stands in as that scene, with a note saying where it came from.
+- A real take was spent finding out that a thing landed half hidden: a probe run comes first.
 - A renamed setting silently changed a seeded scene: seeds and labels are checked against the code before filming.
 - Dev labels and a first-run tip showed up on screen: the release build, a settled state, and a reviewer pass on stills.
 - A clean-up deleted one release's films, and a later video had to lift shots from the posted clip and paint its captions out: the films are kept.

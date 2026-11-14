@@ -1,6 +1,6 @@
 {
   "name": "ghostlabs-skills",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Agent skills from Ghost Robotics Lab's own shipped work. Each one helped ship a real app, and works in your project too.",
   "author": {
     "name": "Ghost Robotics Lab",

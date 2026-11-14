@@ -571,6 +571,66 @@ def lavfi_clip(path, size, duration, box_at, tone=None):
     subprocess.run(cmd, check=True)
 
 
+RED, BLUE, GREEN = (220, 30, 30), (30, 30, 220), (30, 200, 30)
+
+
+def change_only_film(path, size=(180, 320)):
+    """Red until 3 s, blue until 7 s, then green, with a frame only where the picture changes.
+
+    A simulator's recording and `adb screenrecord` both write films like this one.
+    """
+    folder = os.path.dirname(path)
+    lines = []
+    for name, rgb, seconds in (("red", RED, 3), ("blue", BLUE, 4), ("green", GREEN, 3)):
+        png = os.path.join(folder, f"{name}.png")
+        Image.new("RGB", size, rgb).save(png)
+        lines.append(f"file '{png}'\nduration {seconds}\n")
+    lines.append(f"file '{png}'\n")
+    listing = os.path.join(folder, "frames.txt")
+    with open(listing, "w", encoding="utf-8") as f:
+        f.write("".join(lines))
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listing,
+                    "-fps_mode", "vfr", "-c:v", "libx264", "-pix_fmt", "yuv420p", path], check=True)
+    counted = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0",
+                              "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", path],
+                             capture_output=True, text=True, check=True).stdout
+    assert int(counted.strip()) <= 5, "the fixture must have frames only where the picture changes"
+
+
+def late_picture(film, out, by=0.4):
+    """The same film beside a sound track, its picture starting `by` seconds after its sound."""
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=8",
+                    "-itsoffset", f"{by}", "-i", film, "-map", "1:v", "-map", "0:a", "-c:v", "copy", "-c:a", "aac",
+                    out], check=True)
+    start = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=start_time", "-of", "csv=p=0", out],
+                           capture_output=True, text=True, check=True).stdout
+    assert abs(float(start.strip()) - by) < 0.05, f"the fixture's picture must start {by} s late, not {start}"
+
+
+def beep_clip(path, size, duration, at):
+    """A dark clip where a white box appears, and a tone starts, at `at` seconds."""
+    w, h = size
+    video = (f"color=c=0x202020:s={w}x{h}:r=30:d={duration},"
+             f"drawbox=x={w // 4}:y={h // 4}:w={w // 2}:h={h // 2}:color=white:t=fill:enable='gte(t,{at})'")
+    sound = f"aevalsrc=exprs='if(gte(t,{at}),0.5*sin(2*PI*440*t),0)':s=48000:d={duration}"
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", video, "-f", "lavfi", "-i", sound,
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", path], check=True)
+
+
+def sound_starts(video):
+    """The second each ear's sound starts at: (left, right)."""
+    raw = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", video, "-f", "s16le", "-ac", "2", "-ar", "48000", "-"],
+                         check=True, capture_output=True).stdout
+    samples = array.array("h", raw)
+    return tuple(next((i / 48000 for i, x in enumerate(samples[ch::2]) if abs(x) > 3000), None) for ch in (0, 1))
+
+
+def colour_name(rgb):
+    r, g, b = rgb
+    return "red" if r > 150 and g < 100 else "blue" if b > 150 and r < 100 else "green" if g > 150 and r < 100 else rgb
+
+
 def frame_at(video, t, out_png):
     subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", video,
                     "-frames:v", "1", out_png], check=True)
@@ -710,6 +770,102 @@ class FfmpegTest(TempDirCase):
                          ["still_0000.00s.png", "still_0001.00s.png", "still_0002.00s.png"])
         img = Image.open(os.path.join(out_dir, "still_0002.00s.png")).convert("L")
         self.assertGreater(img.getpixel((90, 160)), 200)
+
+    def test_stills_show_what_was_on_screen_where_a_film_has_frames_only_on_change(self):
+        film = os.path.join(self.tmp, "film.mp4")
+        change_only_film(film)
+        out_dir = os.path.join(self.tmp, "stills")
+        code, _, err = run_main(["stills", film, "--out", out_dir, "--at", "2.0", "5.0", "6.9", "8.0", "10.02"])
+        self.assertEqual(code, 0, err)
+        seen = {name: colour_name(Image.open(os.path.join(out_dir, name)).convert("RGB").getpixel((90, 160)))
+                for name in sorted(os.listdir(out_dir))}
+        self.assertEqual(seen, {"still_0002.00s.png": "red", "still_0005.00s.png": "blue",
+                                "still_0006.90s.png": "blue", "still_0008.00s.png": "green",
+                                "still_0010.02s.png": "green"})   # after the last frame: it stays on screen
+
+    def test_more_stills_than_one_pass_takes_and_times_too_close_to_tell_apart(self):
+        film = os.path.join(self.tmp, "film.mp4")
+        change_only_film(film)
+        out_dir = os.path.join(self.tmp, "many")
+        code, out, err = run_main(["stills", film, "--out", out_dir, "--every", "0.05"])
+        self.assertEqual(code, 0, err)
+        names = sorted(os.listdir(out_dir))
+        self.assertEqual(len(names), 201)
+        self.assertIn("Wrote 201 still(s)", out)
+        for name, want in (("still_0002.95s.png", "red"), ("still_0009.95s.png", "green")):
+            self.assertEqual(colour_name(Image.open(os.path.join(out_dir, name)).convert("RGB").getpixel((90, 160))),
+                             want, name)
+        close = os.path.join(self.tmp, "close")
+        code, out, err = run_main(["stills", film, "--out", close, "--at", "3.5", "3.501", "3.504"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(os.listdir(close), ["still_0003.50s.png"])
+        self.assertIn("Wrote 1 still(s)", out)
+
+    def test_a_film_whose_picture_starts_after_its_sound_keeps_the_films_own_time(self):
+        plain, film = os.path.join(self.tmp, "plain.mp4"), os.path.join(self.tmp, "late.mp4")
+        change_only_film(plain)
+        late_picture(plain, film)                     # red until 3.4 s, blue until 7.4 s, then green
+        out_dir = os.path.join(self.tmp, "stills")
+        self.assertEqual(run_main(["stills", film, "--out", out_dir, "--at", "3.3", "3.6", "7.3"])[0], 0)
+        seen = [colour_name(Image.open(os.path.join(out_dir, n)).convert("RGB").getpixel((90, 160)))
+                for n in sorted(os.listdir(out_dir))]
+        self.assertEqual(seen, ["red", "blue", "blue"])
+        code, out, err = run_main(["find-change", film, "--from", "0.1", "--to", "5", "--top", "1"])
+        self.assertEqual(code, 0, out + err)
+        self.assertAlmostEqual(float(re.search(r"([0-9.]+) s", out.split("\n", 1)[1]).group(1)), 3.4, delta=0.034)
+        pair = os.path.join(self.tmp, "p.mp4")
+        code, _, err = run_main(["pair", "--before", film, "--after", film, "--sync-before", "3.4",
+                                 "--sync-after", "3.4", "--title", "T", "--what", "W", "--lead", "5",
+                                 "--intro-seconds", "1", "--out", pair])
+        self.assertEqual(code, 0, err)
+        lay = ht.pair_layout("side", (180, 320), (180, 320))
+        for t, want in ((4.2, "red"), (4.6, "blue")):                  # the lead is the whole 3.4 s: moment at 4.4 s
+            png = os.path.join(self.tmp, f"at{t}.png")
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t}", "-i", pair,
+                            "-frames:v", "1", png], check=True)
+            img = Image.open(png).convert("RGB")
+            for side in ("before", "after"):
+                x, y, w, h = lay[side]
+                self.assertEqual(colour_name(img.getpixel((x + w // 2, y + h // 2))), want, f"{side} at {t} s")
+
+    def test_pair_keeps_each_sides_sound_on_its_picture(self):
+        before, after = os.path.join(self.tmp, "b.mp4"), os.path.join(self.tmp, "a.mp4")
+        beep_clip(before, (180, 320), 4.0, at=2.5)
+        beep_clip(after, (180, 320), 3.0, at=1.0)
+        out = os.path.join(self.tmp, "p.mp4")
+        code, _, err = run_main(["pair", "--before", before, "--after", after, "--sync-before", "2.5",
+                                 "--sync-after", "1.0", "--title", "T", "--what", "W", "--intro-seconds", "1",
+                                 "--out", out])
+        self.assertEqual(code, 0, err)
+        left, right = sound_starts(out)                # the lead is clamped to 1.0 s: the moment is at 2.0 s
+        self.assertAlmostEqual(left, 2.0, delta=0.05)
+        self.assertAlmostEqual(right, 2.0, delta=0.05)
+
+    def test_find_change_keeps_the_films_own_time_where_frames_come_only_on_change(self):
+        film = os.path.join(self.tmp, "film.mp4")
+        change_only_film(film)
+        code, out, err = run_main(["find-change", film, "--from", "4", "--to", "9", "--top", "1"])
+        self.assertEqual(code, 0, out + err)
+        first = re.search(r"([0-9.]+) s", out.split("\n", 1)[1])
+        self.assertAlmostEqual(float(first.group(1)), 7.0, delta=0.034)
+
+    def test_pair_shows_the_screen_before_the_moment_where_frames_come_only_on_change(self):
+        film = os.path.join(self.tmp, "film.mp4")
+        change_only_film(film)
+        out = os.path.join(self.tmp, "p.mp4")
+        code, _, err = run_main(["pair", "--before", film, "--after", film, "--sync-before", "7.0",
+                                 "--sync-after", "7.0", "--title", "T", "--what", "W", "--lead", "3",
+                                 "--intro-seconds", "1", "--out", out])
+        self.assertEqual(code, 0, err)
+        lay = ht.pair_layout("side", (180, 320), (180, 320))
+        for t, want in ((1.5, "blue"), (3.5, "blue"), (4.5, "green")):     # the moment is at 1 + 3 s
+            png = os.path.join(self.tmp, f"at{t}.png")
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t}", "-i", out,
+                            "-frames:v", "1", png], check=True)
+            img = Image.open(png).convert("RGB")
+            for side in ("before", "after"):
+                x, y, w, h = lay[side]
+                self.assertEqual(colour_name(img.getpixel((x + w // 2, y + h // 2))), want, f"{side} at {t} s")
 
 
 if __name__ == "__main__":

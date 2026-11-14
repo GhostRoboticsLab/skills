@@ -421,6 +421,114 @@ class FfmpegTest(TempDirCase):
         self.assertEqual(a.getpixel(middle), b.getpixel(middle), "the safe middle stays as filmed")
         self.assertNotEqual(a.getpixel(low), b.getpixel(low), "the band a feed covers is tinted")
 
+    def change_only_film(self):
+        """Red until 3 s, blue until 7 s, then green, with a frame only where the picture changes."""
+        listing = os.path.join(self.tmp, "frames.txt")
+        with open(listing, "w", encoding="utf-8") as f:
+            for name, colour, seconds in (("red", (220, 30, 30), 3), ("blue", (30, 30, 220), 4),
+                                          ("green", (30, 200, 30), 3)):
+                png = self.png(f"{name}.png", colour, (320, 640))
+                f.write(f"file '{png}'\nduration {seconds}\n")
+            f.write(f"file '{png}'\n")
+        film = os.path.join(self.tmp, "film.mp4")
+        self.ffmpeg("-f", "concat", "-safe", "0", "-i", listing, "-fps_mode", "vfr", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", film)
+        return film
+
+    @staticmethod
+    def colour_of(path):
+        r, g, b = Image.open(path).convert("RGB").getpixel((160, 320))
+        return "red" if r > 150 and g < 100 else "blue" if b > 150 and r < 100 else "green" if g > 150 else (r, g, b)
+
+    def test_peek_shows_a_film_as_the_cut_will_read_it(self):
+        film = self.change_only_film()
+        folder, sheet = os.path.join(self.tmp, "peek"), os.path.join(self.tmp, "peek.png")
+        code, stdout, err = run_main(["peek", film, "--from", "2.5", "--to", "7.5", "--every", "1",
+                                      "--out", folder, "--sheet", sheet])
+        self.assertEqual(code, 0, stdout + err)
+        seen = {name: self.colour_of(os.path.join(folder, name)) for name in sorted(os.listdir(folder))}
+        self.assertEqual(seen, {"peek_002.50s.png": "red", "peek_003.50s.png": "blue", "peek_004.50s.png": "blue",
+                                "peek_005.50s.png": "blue", "peek_006.50s.png": "blue", "peek_007.50s.png": "green"})
+        self.assertIn(os.path.join(folder, "peek_002.50s.png"), stdout)
+        with Image.open(sheet) as img:
+            self.assertGreater(img.width, img.height)
+
+    def test_peek_names_a_window_the_film_cannot_fill(self):
+        film = self.change_only_film()
+        folder = os.path.join(self.tmp, "peek")
+        for argv, text in ((["--from", "12", "--to", "14"], "long"),
+                           (["--from", "5", "--to", "4"], "--to"),
+                           (["--from", "0", "--to", "9", "--every", "0"], "--every"),
+                           (["--from", "0", "--to", "9", "--every", "0.1"], "stills")):
+            code, _, err = run_main(["peek", film, *argv, "--out", folder])
+            self.assertEqual(code, 2, argv)
+            self.assertIn(text, err)
+        self.assertFalse(os.path.exists(folder), "a refused peek writes nothing")
+        self.assertEqual(run_main(["peek", film, "--from", "6", "--to", "8", "--out", folder])[0], 0)
+        code, _, err = run_main(["peek", film, "--from", "6", "--to", "8", "--out", folder])
+        self.assertEqual(code, 2)
+        self.assertIn("fresh folder", err)
+
+    def test_a_film_whose_picture_starts_after_its_sound_keeps_the_films_own_time(self):
+        plain, film = self.change_only_film(), os.path.join(self.tmp, "late.mp4")
+        self.ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=8", "-itsoffset", "0.4", "-i", plain,
+                    "-map", "1:v", "-map", "0:a", "-c:v", "copy", "-c:a", "aac", film)
+        folder = os.path.join(self.tmp, "peek")                  # red until 3.4 s, blue until 7.4 s
+        code, stdout, err = run_main(["peek", film, "--from", "3.3", "--to", "3.6", "--every", "0.3", "--out", folder])
+        self.assertEqual(code, 0, stdout + err)
+        self.assertEqual([self.colour_of(os.path.join(folder, n)) for n in sorted(os.listdir(folder))],
+                         ["red", "blue"])
+        spec = a_spec(scenes=[{"caption": "Red stays red", "source": "late.mp4", "in": 0.0, "out": 4.0}])
+        out, _ = self.render(self.write_spec(spec))
+        still = os.path.join(self.tmp, "mid.png")
+        self.ffmpeg("-ss", "5.2", "-i", out, "-frames:v", "1", still)       # 2 s of card, then the film's 3.2 s
+        bx, by, bw, bh = clip.layout_for(clip.normalise(spec), (270, 480))["box"]
+        r, g, b = Image.open(still).convert("RGB").getpixel((bx + bw // 2, by + bh // 2))
+        self.assertGreater(r, 150, (r, g, b))
+        self.assertLess(b, 100, (r, g, b))
+
+    def test_peek_shows_the_frame_render_starts_a_scene_on(self):
+        film = self.change_only_film()                           # blue from 3.0 s: the film's frame 90
+        folder = os.path.join(self.tmp, "peek")
+        code, stdout, err = run_main(["peek", film, "--from", "2.97", "--to", "2.99", "--every", "0.02",
+                                      "--out", folder])
+        self.assertEqual(code, 0, stdout + err)
+        self.assertEqual({n: self.colour_of(os.path.join(folder, n)) for n in sorted(os.listdir(folder))},
+                         {"peek_002.97s.png": "red", "peek_002.99s.png": "blue"})   # frames 89 and 90, as trim rounds
+        spec = a_spec(scenes=[{"caption": "Red stays red", "source": "film.mp4", "in": 2.99, "out": 5.0}])
+        out, _ = self.render(self.write_spec(spec))
+        first = os.path.join(self.tmp, "first.png")
+        self.ffmpeg("-ss", "2.0", "-i", out, "-frames:v", "1", first)       # the scene's first frame
+        bx, by, bw, bh = clip.layout_for(clip.normalise(spec), (270, 480))["box"]
+        r, g, b = Image.open(first).convert("RGB").getpixel((bx + bw // 2, by + bh // 2))
+        self.assertGreater(b, 150, "render starts in=2.99 on the same frame peek shows for 2.99")
+
+    def test_more_stills_than_one_pass_takes(self):
+        film = self.change_only_film()
+        folder = os.path.join(self.tmp, "many")
+        code, stdout, err = run_main(["stills", film, "--every", "0.05", "--out", folder])
+        self.assertEqual(code, 0, stdout + err)
+        self.assertEqual(len(os.listdir(folder)), 201)
+        self.assertEqual(self.colour_of(os.path.join(folder, "every_002.95s.png")), "red")
+        self.assertEqual(self.colour_of(os.path.join(folder, "every_009.95s.png")), "green")
+
+    def test_peek_never_writes_two_stills_under_one_name(self):
+        film = self.change_only_film()
+        folder = os.path.join(self.tmp, "close")
+        code, stdout, err = run_main(["peek", film, "--from", "3.5", "--to", "3.52", "--every", "0.004",
+                                      "--out", folder])
+        self.assertEqual(code, 0, stdout + err)
+        self.assertEqual(sorted(os.listdir(folder)), ["peek_003.50s.png", "peek_003.51s.png", "peek_003.52s.png"])
+        self.assertIn("Wrote 3 still(s)", stdout)
+
+    def test_a_still_after_a_films_last_change_holds_its_last_picture(self):
+        film = self.change_only_film()          # its last frame is at 10.0 s, and it runs a frame longer
+        folder = os.path.join(self.tmp, "tail")
+        code, stdout, err = run_main(["stills", film, "--every", "10.02", "--out", folder])
+        self.assertEqual(code, 0, stdout + err)
+        self.assertEqual({n: self.colour_of(os.path.join(folder, n)) for n in sorted(os.listdir(folder))},
+                         {"every_000.00s.png": "red", "every_010.02s.png": "green"})
+
     def test_stills_refuse_a_folder_that_holds_an_earlier_runs_stills(self):
         path = self.ready_spec()
         out, _ = self.render(path)

@@ -8,9 +8,11 @@ How to film a scene that holds up. The project file (`docs/agents/whats-new-clip
 - **A seeded, repeatable state.** The same test account, sample data and settings at the start of every scene, from the project's seed command, so a retake shows the same screen. Pin anything that drifts between takes: the date and clock, a random seed, a "featured today" item.
 - **Settled.** Play the first launch out once before filming: onboarding, permission prompts, tips, rating asks, a keyboard's first-run card. Each would otherwise land in some scene.
 - **One look.** The same device or window size, theme and language in every scene, and the product's own theme, the one people see. A clean status bar: a fixed time, full battery, full signal.
+- **One take at a time.** Scenes share one device or simulator and one seeded state: film them one after another, never in parallel. Build into a folder of this take's own, since a shared build folder lets another build swap the app under a film.
+- **Probe first.** Before a scene's real take, run it once as a dry run that ends by printing every control's label and position, and look at one still of where it ended. It gives the labels and points the real steps need, and shows where a thing lands before a take is spent on it.
 - **Real input** through the product's own UI, found by label or role. A shortcut that jumps to a screen skips the transition people see. An OS-level link opener can put its own "Open in ...?" prompt over the app: drive it from the UI test framework instead.
 - **Rest on both sides.** Hold a second of stillness before the change and after it, so `in` and `out` have room.
-- **Marks, not eyes.** Log the second each step starts, measured from the recording's start, into a file beside the film. Finding cut points by scrubbing a film eats most of a clip's time; with marks, `in` is a step's mark minus a beat. Check the marks against a still, since a driver's log can trail the screen.
+- **Marks, not eyes.** Log the second each step starts, measured from the recording's start, into a file beside the film. Finding cut points by scrubbing a film eats most of a clip's time; with marks, `in` is a step's mark minus a beat. Check each mark with `clip.py peek`, since a driver's log can trail the screen. `peek` reads the film as `render` does. A seek of your own (`ffmpeg -ss`) does not: a screen recording, a simulator's or `adb screenrecord`'s, holds a frame only where the picture changed, so the seek lands on the next change.
 - **Nothing private.** No real person's name, email, photo or message on screen, no notifications, no production data. Sign in only to test accounts, and send nothing to anyone.
 - **Keep every film**, outside the repo, beside the clip. A film is the only way to render that scene again, with or without its caption.
 
@@ -46,7 +48,7 @@ try {
 }
 ```
 
-The video's clock starts with the context, a little before `t0`: check one mark against a still. Playwright's video is small (the viewport's CSS pixels). For a sharp scene, take `page.screenshot()` stills at full device scale and make still scenes, or record the screen with the desktop recipe.
+The video's clock starts with the context, a little before `t0`: check one mark with `clip.py peek`. Playwright's video is small (the viewport's CSS pixels). For a sharp scene, take `page.screenshot()` stills at full device scale and make still scenes, or record the screen with the desktop recipe.
 
 Without Playwright, and without leave to install it: drive the page with the project's own end-to-end tests, take a screenshot after each step, and make still scenes (`seconds` in place of `in` and `out`).
 
@@ -71,7 +73,7 @@ Touch only the app under test. A shared device belongs to other people too: no u
 | Theme | `xcrun simctl ui booted appearance dark` (or `light`) |
 | Install, launch | `xcrun simctl install booted App.app`, `xcrun simctl launch booted <bundle id>` |
 
-`simctl` sends no taps: drive the scene with XCUITest, Flutter `integration_test`, Detox or Maestro, and start the recording before the test. iOS draws no touch indicators in a recording; if a tap must show, the product draws its own in a build flag that never ships. A simulator recording has frames only where the screen changed; `clip.py` reads films at 30 fps before cutting, so `in` lands on what was on screen.
+`simctl` sends no taps: drive the scene with XCUITest, Flutter `integration_test`, Detox or Maestro, and start the recording before the test. iOS draws no touch indicators in a recording; if a tap must show, the product draws its own in a build flag that never ships. A simulator recording has frames only where the screen changed; `clip.py` reads films at 30 fps before cutting, so `in` lands on what was on screen, and `clip.py peek` shows a film the same way.
 
 ## Desktop
 
@@ -99,6 +101,17 @@ Sleep 3s
 ```
 
 Run `vhs scene.tape`. Use the same theme, size and font for every scene.
+
+## What the capture cannot film
+
+A simulator has no camera and no second device, and a browser recorder sees one tab. A change that needs one (a camera view, augmented reality, a hand-off between two devices, a piece of hardware) is shown from a **kept film**: footage made another way, used as that scene's `source` like any other film.
+
+- Look for footage that exists first. The AFTER recording of a hand test, or a film made while the release was tested, already shows the real build.
+- Else film it on a real device, with a build of this release, in the theme and language of the other scenes. On a shared device, ask first, and film a test copy of the app installed beside the one its owner uses, never that one.
+- Say in the scene's `note` where the film came from: who filmed it, on which build and device.
+- None of the checks above hold for it: no marks, no seeded state, no labels checked against the code. So pick `in` and `out` with `clip.py peek`, and look at its stills for the release's version, the theme and the people in it (below).
+- A landscape film in a vertical frame runs wide, past the side edges a feed covers: give the scene a `crop` round what matters.
+- Its own sound is never used: `render` takes a film's picture only.
 
 ## People in the picture
 
