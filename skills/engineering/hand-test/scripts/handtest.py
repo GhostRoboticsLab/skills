@@ -360,7 +360,7 @@ def need_tools():
 
 
 def run_ffmpeg(args):
-    proc = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", *args], capture_output=True, text=True)
+    proc = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y", *args], capture_output=True, text=True)
     if proc.returncode:
         tail = "\n".join(proc.stderr.strip().splitlines()[-15:])
         raise RuntimeError(f"ffmpeg failed:\n{tail}")
@@ -528,7 +528,7 @@ def frame_diffs(video: str, t_from: float, t_to: float, crop=None, width: int = 
     width = min(width, _even(w))
     sh = _even(width * h / w)
     vf += [f"fps={FPS}", f"scale={width}:{sh}", "format=gray"]
-    proc = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t_from:.3f}", "-t", f"{t_to - t_from:.3f}", "-i", video,
+    proc = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{t_from:.3f}", "-t", f"{t_to - t_from:.3f}", "-i", video,
                            "-vf", ",".join(vf), "-f", "rawvideo", "-"], capture_output=True)
     if proc.returncode:
         raise RuntimeError(f"ffmpeg failed: {proc.stderr.decode(errors='replace')[-500:]}")

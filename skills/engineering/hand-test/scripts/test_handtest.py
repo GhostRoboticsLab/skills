@@ -561,7 +561,7 @@ def lavfi_clip(path, size, duration, box_at, tone=None):
     video = (f"color=c=0x202020:s={w}x{h}:r=30:d={duration},"
              f"drawbox=x={w // 4}:y={h // 4}:w={w // 2}:h={h // 2}:color=white:t=fill:"
              f"enable='gte(t,{box_at})'")
-    cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", video]
+    cmd = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", video]
     if tone:
         cmd += ["-f", "lavfi", "-i", f"sine=frequency={tone}:duration={duration}:sample_rate=48000"]
     cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
@@ -572,7 +572,7 @@ def lavfi_clip(path, size, duration, box_at, tone=None):
 
 
 def frame_at(video, t, out_png):
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", video,
+    subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{t:.3f}", "-i", video,
                     "-frames:v", "1", out_png], check=True)
     return Image.open(out_png).convert("L")
 
@@ -583,7 +583,7 @@ def centre_level(img, rect):
 
 
 def channel_rms(video, start, dur):
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{start}", "-t", f"{dur}", "-i", video,
+    raw = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{start}", "-t", f"{dur}", "-i", video,
                           "-f", "s16le", "-ac", "2", "-ar", "48000", "-"],
                          check=True, capture_output=True).stdout
     samples = array.array("h", raw)
@@ -668,12 +668,24 @@ class FfmpegTest(TempDirCase):
         first = re.search(r"([0-9.]+) s", out.split("\n", 1)[1])
         self.assertAlmostEqual(float(first.group(1)), 1.5, delta=0.034)
 
+    def test_ffmpeg_never_reads_the_callers_input(self):
+        # ffmpeg polls stdin for keys. In a loop that pipes file names to this tool, it would eat them.
+        clip = os.path.join(self.tmp, "a.mp4")
+        lavfi_clip(clip, (320, 640), 2, 1.0)
+        with mock.patch.object(ht.subprocess, "run", wraps=subprocess.run) as run:
+            self.assertEqual(run_main(["find-change", clip, "--from", "0.5", "--to", "1.5"])[0], 0)
+            self.assertEqual(run_main(["stills", clip, "--at", "1.2", "--out", os.path.join(self.tmp, "s")])[0], 0)
+        calls = [c.args[0] for c in run.call_args_list if c.args[0][0] == "ffmpeg"]
+        self.assertGreaterEqual(len(calls), 2)
+        for argv in calls:
+            self.assertIn("-nostdin", argv)
+
     def test_find_change_sees_a_small_switch_flip(self):
         clip = os.path.join(self.tmp, "small.mp4")
         video = ("color=c=0xf0f0f0:s=540x1100:r=30:d=3,"
                  "drawbox=x=440:y=200:w=36:h=36:color=0xd8d8d8:t=fill:enable='lt(t,1.5)',"
                  "drawbox=x=480:y=200:w=36:h=36:color=0xd8d8d8:t=fill:enable='gte(t,1.5)'")
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", video, "-c:v", "libx264",
+        subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", video, "-c:v", "libx264",
                         "-preset", "ultrafast", "-pix_fmt", "yuv420p", clip], check=True)
         code, out, err = run_main(["find-change", clip, "--from", "0.5", "--to", "2.5"])
         self.assertEqual(code, 0, out + err)

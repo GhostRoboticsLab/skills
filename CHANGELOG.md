@@ -7,6 +7,7 @@ Newest first. The top entry's version equals `version` in `.claude-plugin/plugin
 - New bucket, `product/`, for skills about what users get. Its first two skills are user-invoked.
 - New skill, `app-critic`: score the whole product on a scorecard, every score with evidence, and turn what it finds into prioritised stories.
 - New skill, `whats-new-clip`: for each release, cut a short What's New clip from the product's real screens: words first, filmed on the real build, reviewed before a person sees it.
+- `hand-test`: its ffmpeg calls no longer read the caller's input. In a loop that pipes file names to the tool, ffmpeg ate part of the next name.
 - The repo: a security policy, Dependabot for the workflow's actions, and the actions pinned to commits.
 
 ## 0.1.0 (2026-11-14)

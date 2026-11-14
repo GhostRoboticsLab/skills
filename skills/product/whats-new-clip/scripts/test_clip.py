@@ -311,7 +311,7 @@ def probe_streams(path):
 
 
 def max_volume(path):
-    err = subprocess.run(["ffmpeg", "-hide_banner", "-i", path, "-af", "volumedetect", "-f", "null", "-"],
+    err = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", path, "-af", "volumedetect", "-f", "null", "-"],
                          capture_output=True, text=True).stderr
     return float(re.search(r"max_volume: (-?[\d.]+) dB", err).group(1))
 
@@ -321,7 +321,7 @@ class FfmpegTest(TempDirCase):
     SIZE = "270x480"
 
     def ffmpeg(self, *args):
-        subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-y", *args], check=True)
+        subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y", *args], check=True)
 
     def render(self, path, *extra):
         out = os.path.join(self.tmp, "clip.mp4")
