@@ -13,8 +13,9 @@ Commands:
   render   build the clip: h264 + aac, 30 fps, faststart
   stills   pull review stills: one mid-segment per card and scene, and one every N seconds;
            --safe tints what a feed covers
+  peek     stills of a film between two of its seconds, read as render reads it: for `in` and `out`
 
-Needs Python 3.9+, Pillow 10.1+, and ffmpeg and ffprobe on PATH for render, stills and film checks.
+Needs Python 3.9+, Pillow 10.1+, and ffmpeg and ffprobe on PATH for render, stills, peek and film checks.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ MIN_CARD = 1.0
 MAX_LINES = 2
 MIN_CONTRAST = 4.5   # WCAG AA for text
 MAX_UPSCALE = 1.25   # past this a screen is blown up past its own pixels and reads as soft
+MAX_PEEK = 60        # stills in one peek: more than a person looks at
 MIN_FILL = 0.2       # under this share of the frame a screen is too small to read: the wrong shape for the size
 DEFAULT_SIZE = (1080, 1920)
 DEFAULT_MAX = 30.0
@@ -459,16 +461,46 @@ def encode_card(png, frames, out):
     run_ffmpeg([*loop(png), "-vf", TO_YUV, "-frames:v", str(frames), *ENCODE, out])
 
 
+# A screen recording has frames only where the picture changed, so a seek in one lands on the
+# next change, not on what was on screen. Every read of a film therefore runs it through fps
+# first, which holds each frame until the next, and counts from there. start_time=0 counts from
+# the film's own start, where its picture starts after its sound.
+
+STEADY = f"fps={FPS}:start_time=0"
+
+
+def frames_at(video, times, paths):
+    """Write the picture on screen at each of `times` (seconds) to the path beside it in `paths`.
+
+    A time falls on the nearest of the film's 30 frames a second, as `trim` rounds it.
+    """
+    wanted = [max(0, math.floor(t * FPS + 0.5)) for t in times]
+    numbers = sorted(set(wanted))
+    with tempfile.TemporaryDirectory() as td:
+        got = {}
+        for i in range(0, len(numbers), 100):
+            part = numbers[i:i + 100]
+            pick = "+".join(f"eq(n,{n})" for n in part)
+            # tpad holds the last picture, so a time after the film's last change still has a frame.
+            vf = (f"{STEADY},tpad=stop_mode=clone:stop_duration={part[-1] / FPS + 1:.3f},"
+                  f"select='{pick}',setpts=N/({FPS}*TB)")
+            run_ffmpeg(["-i", video, "-vf", vf, "-frames:v", str(len(part)),
+                        os.path.join(td, f"{i:05d}_%05d.png")])
+            for k, n in enumerate(part, start=1):
+                got[n] = os.path.join(td, f"{i:05d}_{k:05d}.png")
+        for n, path in zip(wanted, paths):
+            if not os.path.exists(got[n]):
+                raise RuntimeError(f"ffmpeg wrote no frame for {n / FPS:.2f} s of {video}")
+            shutil.copyfile(got[n], path)
+
+
 def encode_scene(bg, fg, src, seg, rect, out):
     sc, (x, y, w, h) = seg["scene"], rect
     if is_still(src):
         src_in, chain = loop(src), ""
     else:
-        # fps before trim: a screen recording has frames only where the picture changed, so a
-        # seek lands on the next change. fps holds each frame until the next, so `in` shows
-        # what was on screen at that second.
         src_in = ["-i", src]
-        chain = f"fps={FPS},trim=start={float(sc['in']):.3f}:end={float(sc['out']):.3f},setpts=PTS-STARTPTS,"
+        chain = f"{STEADY},trim=start={float(sc['in']):.3f}:end={float(sc['out']):.3f},setpts=PTS-STARTPTS,"
     if sc.get("crop"):
         sw, sh = source_size(src)
         cx, cy, cw, ch = sc["crop"]
@@ -868,11 +900,15 @@ def tint_unsafe(path, safe):
     Image.alpha_composite(img, veil).convert("RGB").save(path)
 
 
+def fresh_folder(out):
+    if os.path.isdir(out) and any(STILL_RE.fullmatch(n) for n in os.listdir(out)):
+        raise ValueError(f"{out} holds stills from an earlier run; use a fresh folder for each run")
+
+
 def cmd_stills(a) -> int:
     if not a.spec and a.every is None:
         raise ValueError("give --spec (a still mid-segment) or --every N, or both")
-    if os.path.isdir(a.out) and any(STILL_RE.fullmatch(n) for n in os.listdir(a.out)):
-        raise ValueError(f"{a.out} holds stills from an earlier run; use a fresh folder for each render")
+    fresh_folder(a.out)
     info = probe(a.video)
     duration = info["duration"]
     base = os.path.dirname(os.path.abspath(a.spec)) if a.spec else "."
@@ -885,10 +921,11 @@ def cmd_stills(a) -> int:
                   "render again if the spec changed")
     times = still_times(segs, duration, a.every)
     os.makedirs(a.out, exist_ok=True)
+    times = sorted(times, key=lambda x: (x[1], x[0]))
+    paths = [os.path.join(a.out, f"{label}_{t:06.2f}s.png") for label, t in times]
+    frames_at(a.video, [t for _, t in times], paths)
     items = []
-    for label, t in sorted(times, key=lambda x: (x[1], x[0])):
-        path = os.path.join(a.out, f"{label}_{t:06.2f}s.png")
-        run_ffmpeg(["-ss", f"{t:.3f}", "-i", a.video, "-frames:v", "1", path])
+    for (label, t), path in zip(times, paths):
         if a.safe:
             tint_unsafe(path, s["safe"])
         items.append((path, f"{label}  {t:.1f} s"))
@@ -897,6 +934,45 @@ def cmd_stills(a) -> int:
         render_sheet(items, a.sheet)
         print(a.sheet)
     print(f"Wrote {len(items)} still(s). Look at every one before a person sees the clip.")
+    return 0
+
+
+def peek_times(start: float, end: float, every: float, duration: float):
+    """The seconds of a film to look at: from `start` to `end`, one every `every`, inside the film."""
+    if every <= 0:
+        raise ValueError("--every must be more than 0")
+    if start < 0 or end < start:
+        raise ValueError("--to must not be before --from, and neither before 0")
+    if start >= duration:
+        raise ValueError(f"--from {start:g} is past the film, which is {duration:.2f} s long")
+    times, i = [], 0
+    while start + i * every <= min(end, duration - 1e-6) + 1e-9:
+        t = round(start + i * every, 2)        # a still's name holds two decimals, under a frame apart
+        if t not in times[-1:]:
+            times.append(t)
+        i += 1
+    if len(times) > MAX_PEEK:
+        raise ValueError(f"that is {len(times)} stills, and {MAX_PEEK} is the most for one look: "
+                         "bring --from and --to closer, or raise --every")
+    return times
+
+
+def cmd_peek(a) -> int:
+    fresh_folder(a.out)
+    duration = probe(a.film)["duration"]
+    times = peek_times(a.from_, a.to, a.every, duration)
+    if a.to >= duration:
+        print(f"note: the film is {duration:.2f} s long, so the stills stop there")
+    os.makedirs(a.out, exist_ok=True)
+    paths = [os.path.join(a.out, f"peek_{t:06.2f}s.png") for t in times]
+    frames_at(a.film, times, paths)
+    for path in paths:
+        print(path)
+    if a.sheet:
+        render_sheet([(path, f"{t:.2f} s") for path, t in zip(paths, times)], a.sheet)
+        print(a.sheet)
+    print(f"Wrote {len(paths)} still(s) of {os.path.basename(a.film)}, each what render shows at that second "
+          "of the film. Set `in` and `out` from these.")
     return 0
 
 
@@ -932,13 +1008,22 @@ def build_parser():
     s.add_argument("--safe", action="store_true",
                    help="tint the edges a feed covers with its own buttons and captions (the spec's safe zone)")
     s.add_argument("--sheet", help="also lay every still out in one image (.png or .jpg)")
+
+    k = sub.add_parser("peek", help="stills of a film between two of its seconds, read as render reads it")
+    k.add_argument("film")
+    k.add_argument("--from", dest="from_", type=float, required=True, help="the film's second to start at")
+    k.add_argument("--to", type=float, required=True, help="the film's second to stop at")
+    k.add_argument("--every", type=float, default=0.5, help="one still every N seconds (default 0.5)")
+    k.add_argument("--out", required=True, help="a fresh folder for the stills")
+    k.add_argument("--sheet", help="also lay every still out in one image (.png or .jpg)")
     return p
 
 
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
     try:
-        return {"init": cmd_init, "check": cmd_check, "render": cmd_render, "stills": cmd_stills}[a.cmd](a)
+        return {"init": cmd_init, "check": cmd_check, "render": cmd_render, "stills": cmd_stills,
+                "peek": cmd_peek}[a.cmd](a)
     except (ValueError, RuntimeError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

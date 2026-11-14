@@ -38,7 +38,7 @@ If setup already wrote this version's spec, fill that file. Otherwise start from
 clip.py init <version> --out <spec folder> --from <spec folder>/<last version>.json
 ```
 
-For a first clip, use `--product "<name>"` instead of `--from`. Fill each scene's `caption` (verbatim from step 2), `words_by` (who gave the words), and a planned `in` and `out` long enough to read its caption. Then run `clip.py check <spec> --words`.
+For a first clip, use `--product "<name>"` instead of `--from`. Fill each scene's `caption` (verbatim from step 2), `words_by` (who gave the words), and a planned `in` and `out` long enough to read its caption. A change with nothing to watch gets the shortest scene its caption allows. Then run `clip.py check <spec> --words`.
 
 **Done when:** `check --words` prints `check: ok`.
 
@@ -48,7 +48,17 @@ Film each scene by the rules in [FILMING.md](FILMING.md), with the project file'
 
 If real input through the product's own UI cannot reach a change, stop and tell the user: that is a bug, and a clip filmed round it would promise what people cannot do.
 
-Put the films in this release's clips folder, outside the repo. Set each scene's `source`, `in` and `out` from the time each step was logged as it ran, then run `clip.py check <spec> --media <films folder>`.
+A change the project's capture cannot film at all (a camera view, a second device) is shown from a kept film: see "What the capture cannot film" in FILMING.md.
+
+Put the films in this release's clips folder, outside the repo. Set each scene's `source`, `in` and `out` from the time each step was logged as it ran, and look before you trust a mark:
+
+```sh
+clip.py peek <film> --from <second> --to <second> --out <a fresh scratch folder> --sheet <scratch folder>/peek.png
+```
+
+It shows the film between two of its seconds as `render` will read it. Never pull that still with a seek of your own: a screen recording holds a frame only where the picture changed, so a seek lands on the next change, which can be seconds later.
+
+Then run `clip.py check <spec> --media <films folder>`.
 
 **Done when:** `check` prints `check: ok` with `--media` pointing at the films.
 
@@ -76,7 +86,7 @@ Fix each finding as REVIEW.md's table says, then render and pull the stills agai
 
 Send the approver what REVIEW.md's "The hand-over" lists, the way the project file says, and ask for an OK or what to change. The clip is not posted, and not attached to a release, until they say OK. Posting is whoever the project file names.
 
-On a Not OK, take their changes back to step 2 (words) or step 4 (pictures). A Not OK with no reason: ask once what they disliked before cutting the same shots again.
+On a Not OK, take their changes back to step 2 (words) or step 4 (pictures), and film again only the scenes that change. A Not OK with no reason: ask once what they disliked before cutting the same shots again.
 
 **Done when:** the approver has said OK, or their changes are back in step 2 or 4.
 

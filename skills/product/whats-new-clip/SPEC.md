@@ -32,8 +32,8 @@ One JSON file per release, named `<version>.json`, kept in the repo's spec folde
 | `product`, `version` | The version is shown on the opening card. The file's name must be `<version>.json`, so a copied spec cannot keep the last release's version. |
 | `size` | `[width, height]`, both even. Default 1080x1920. `render --size` makes another format: see below. |
 | `max_seconds` | The longest the clip may run, cards included. Default 30. |
-| `safe` | `[top, right, bottom, left]`, the share of the frame a feed's own buttons and captions cover. Default for a vertical frame: 0.13, 0.15, 0.22, 0.06; otherwise 0.06 all round. Captions and card text stay inside it. The screen runs past it at the bottom, so it stays large: `stills --safe` tints the covered edges for the reviewer pass. |
-| `theme` | `background`, `band` (behind captions), `text`, `muted` (the end card's small lines), `accent` (the version and the caption's bar), as `#RRGGBB`; optional `logo` (a PNG, shown on both cards) and `font` (a `.ttf` or `.otf`; default Pillow's built-in font). |
+| `safe` | `[top, right, bottom, left]`, the share of the frame a feed's own buttons and captions cover. Default for a vertical frame: 0.13, 0.15, 0.22, 0.06; otherwise 0.06 all round. Captions and card text stay inside it. The screen runs past it at the bottom, and a picture wider than a phone's at the sides, so it stays large: `stills --safe` tints the covered edges for the reviewer pass. |
+| `theme` | `background`, `band` (behind captions), `text`, `muted` (the end card's small lines), `accent` (the version and the caption's bar), as `#RRGGBB`; optional `logo` (a PNG, shown on both cards) and `font` (a `.ttf` or `.otf`; default Pillow's built-in font, which has Latin letters and common punctuation only: a character it lacks is drawn as a box, so set `font` for other scripts and symbols). |
 | `open` | `line`: the fixed opening question, the same every release. `seconds`: default 2.0. |
 | `end` | `lines`: the product's name, then where to get it. `image`: optional artwork under the lines, such as store badges exactly as the stores ship them. `seconds`: default 2.5. |
 | `music` | Optional. `file`, looped under the whole clip at a fixed loudness (`lufs`, default -20) with short fades. Without it the clip carries a silent track. |
@@ -46,8 +46,8 @@ A scene:
 |---|---|
 | `caption` | The agreed words, verbatim. `\n` forces a line break. |
 | `words_by` | Who gave the words: the approver, or the product's own text. |
-| `source` | A film (`.mp4`, `.mov`, anything ffmpeg reads) or a still (`.png`, `.jpg`, `.webp`). |
-| `in`, `out` | For a film: the seconds of the film to show. |
+| `source` | A film (`.mp4`, `.mov`, anything ffmpeg reads) or a still (`.png`, `.jpg`, `.webp`). A kept film, footage the capture could not make, is a film like any other, and its `note` says where it came from. |
+| `in`, `out` | For a film: the seconds of the film to show. `clip.py peek` shows the film between two of its seconds as `render` reads it. |
 | `seconds` | For a still: how long it shows. |
 | `crop` | Optional `[x, y, w, h]`, shares of the source's frame, to show only the part that changed. |
 

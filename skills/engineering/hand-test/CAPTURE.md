@@ -27,7 +27,7 @@ git worktree add ../handtest-base <base sha>
 git worktree remove ../handtest-base
 ```
 
-After each take, find the moment with `handtest.py find-change`. A clock or status bar that ticks can outrank the change; leave it out with `--crop W:H:X:Y`.
+After each take, find the moment with `handtest.py find-change`. A clock or status bar that ticks can outrank the change; leave it out with `--crop W:H:X:Y`. It compares brightness, so a change of colour alone, at about the same brightness, needs a lower `--level` (3 in place of 10).
 
 ## Web
 

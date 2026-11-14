@@ -2,6 +2,12 @@
 
 Newest first. The top entry's version equals `version` in `.claude-plugin/plugin.json`, and `scripts/check.py` fails when they differ. Merging a new version to `main` tags it `v<version>` and posts its entry as the GitHub release notes, so write entries without relative links.
 
+## 0.3.0 (2026-11-14)
+
+- `hand-test`: a film with frames only where the picture changed (a simulator's recording, `adb screenrecord`) is now read as it played. Before, `stills` showed the next change instead of what was on screen, `find-change` named times seconds off or found no change, and `pair` showed empty panels from its start until the film's next change. A film whose picture starts after its sound is counted from the film's start.
+- `whats-new-clip`: new command, `clip.py peek`, shows a film between two of its seconds as `render` reads it, for setting a scene's `in` and `out`. `stills` reads the same way, and no longer skips a time after a film's last change.
+- `whats-new-clip`: kept films for what the capture cannot film (a camera view, a second device), a probe run before a scene's real take, and one take at a time.
+
 ## 0.2.0 (2026-11-14)
 
 - New bucket, `product/`, for skills about what users get. Its first two skills are user-invoked.

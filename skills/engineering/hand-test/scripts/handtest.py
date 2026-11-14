@@ -19,6 +19,7 @@ import datetime as dt
 import html
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -366,6 +367,39 @@ def run_ffmpeg(args):
         raise RuntimeError(f"ffmpeg failed:\n{tail}")
 
 
+# A simulator's recording and `adb screenrecord` hold a frame only where the picture changed, and
+# a seek in such a film lands on the next change, not on what was on screen. So every command
+# reads a film at a steady rate first (fps holds each frame until the next) and counts from there.
+# start_time=0 counts from the film's own start, where its picture starts after its sound.
+
+STEADY = f"fps={FPS}:start_time=0"
+
+
+def frames_at(video: str, times, paths) -> None:
+    """Write the picture on screen at each of `times` (seconds) to the path beside it in `paths`.
+
+    A time falls on the nearest of the film's 30 frames a second, as `trim` rounds it.
+    """
+    wanted = [max(0, math.floor(t * FPS + 0.5)) for t in times]
+    numbers = sorted(set(wanted))
+    with tempfile.TemporaryDirectory() as td:
+        got = {}
+        for i in range(0, len(numbers), 100):
+            part = numbers[i:i + 100]
+            pick = "+".join(f"eq(n,{n})" for n in part)
+            # tpad holds the last picture, so a time after the film's last change still has a frame.
+            vf = (f"{STEADY},tpad=stop_mode=clone:stop_duration={part[-1] / FPS + 1:.3f},"
+                  f"select='{pick}',setpts=N/({FPS}*TB)")
+            run_ffmpeg(["-i", video, "-vf", vf, "-frames:v", str(len(part)),
+                        os.path.join(td, f"{i:05d}_%05d.png")])
+            for k, n in enumerate(part, start=1):
+                got[n] = os.path.join(td, f"{i:05d}_{k:05d}.png")
+        for n, path in zip(wanted, paths):
+            if not os.path.exists(got[n]):
+                raise RuntimeError(f"ffmpeg wrote no frame for {n / FPS:.2f} s of {video}")
+            shutil.copyfile(got[n], path)
+
+
 def probe(path: str) -> dict:
     need_tools()
     proc = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
@@ -428,12 +462,11 @@ def cmd_pair(a) -> int:
         bg.save(bg_png)
         args = ["-loop", "1", "-framerate", str(FPS), "-t", f"{intro_s:.3f}", "-i", intro_png,
                 "-loop", "1", "-framerate", str(FPS), "-i", bg_png,
-                "-ss", f"{start_b:.3f}", "-i", a.before,
-                "-ss", f"{start_a:.3f}", "-i", a.after]
+                "-i", a.before, "-i", a.after]
         fc = [
             f"[0:v]scale={W}:{H},format=yuv420p,setsar=1[iv]",
-            f"[2:v]fps={FPS},scale={bw}:{bh},setsar=1[bv]",
-            f"[3:v]fps={FPS},scale={aw}:{ah},setsar=1[av]",
+            f"[2:v]{STEADY},trim=start={start_b:.3f},setpts=PTS-STARTPTS,scale={bw}:{bh},setsar=1[bv]",
+            f"[3:v]{STEADY},trim=start={start_a:.3f},setpts=PTS-STARTPTS,scale={aw}:{ah},setsar=1[av]",
             "[1:v]format=yuv420p[bg]",
             # eof_action=repeat holds the shorter side's last frame until the pair ends.
             f"[bg][bv]overlay={bx}:{by}:eof_action=repeat[t1]",
@@ -447,13 +480,13 @@ def cmd_pair(a) -> int:
                 args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono"]
                 silent = 5
 
-            def side_audio(index, has, label):
-                src = f"[{index}:a]" if has else f"[{silent}:a]"
+            def side_audio(index, has, start, label):
+                src = f"[{index}:a]atrim=start={start:.3f},asetpts=PTS-STARTPTS," if has else f"[{silent}:a]"
                 return (f"{src}aformat=sample_rates=48000:channel_layouts=mono,apad,"
                         f"atrim=duration={dur:.3f},asetpts=PTS-STARTPTS[{label}]")
             fc += [
-                side_audio(2, pb["has_audio"], "ba"),
-                side_audio(3, pa["has_audio"], "aa"),
+                side_audio(2, pb["has_audio"], start_b, "ba"),
+                side_audio(3, pa["has_audio"], start_a, "aa"),
                 "[ba][aa]join=inputs=2:channel_layout=stereo:map=0.0-FL|1.0-FR[pa]",
                 f"[4:a]atrim=duration={intro_s:.3f},aformat=sample_rates=48000:channel_layouts=stereo[ia]",
                 "[iv][ia][pv][pa]concat=n=2:v=1:a=1[v][a]",
@@ -504,9 +537,11 @@ def cmd_stills(a) -> int:
     if not times:
         raise ValueError(f"no time falls inside the video ({info['duration']:.2f} s)")
     os.makedirs(a.out, exist_ok=True)
-    for t in times:
-        path = os.path.join(a.out, still_name(t))
-        run_ffmpeg(["-ss", f"{t:.3f}", "-i", a.video, "-frames:v", "1", path])
+    named = {still_name(t): t for t in reversed(times)}        # times too close to tell apart share a name
+    times = sorted(named.values())
+    paths = [os.path.join(a.out, still_name(t)) for t in times]
+    frames_at(a.video, times, paths)
+    for path in paths:
         print(path)
     print(f"Wrote {len(times)} still(s). Look at every one before a person sees the video.")
     return 0
@@ -527,8 +562,9 @@ def frame_diffs(video: str, t_from: float, t_to: float, crop=None, width: int = 
         w, h = cw, ch
     width = min(width, _even(w))
     sh = _even(width * h / w)
-    vf += [f"fps={FPS}", f"scale={width}:{sh}", "format=gray"]
-    proc = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{t_from:.3f}", "-t", f"{t_to - t_from:.3f}", "-i", video,
+    vf += [STEADY, f"trim=start={t_from:.3f}:end={t_to:.3f}", "setpts=PTS-STARTPTS",
+           f"scale={width}:{sh}", "format=gray"]
+    proc = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", video,
                            "-vf", ",".join(vf), "-f", "rawvideo", "-"], capture_output=True)
     if proc.returncode:
         raise RuntimeError(f"ffmpeg failed: {proc.stderr.decode(errors='replace')[-500:]}")
@@ -561,12 +597,13 @@ def cmd_find_change(a) -> int:
     if a.to <= a.from_:
         raise ValueError("--to must be after --from")
     diffs = frame_diffs(a.video, a.from_, a.to, a.crop, level=a.level)
-    start = first_move(diffs, a.from_, FPS)
+    t0 = math.floor(a.from_ * FPS + 0.5) / FPS       # the frame the window starts on
+    start = first_move(diffs, t0, FPS)
     if start is None:
         print(f"No change in the picture between {a.from_:.2f} s and {a.to:.2f} s. Check the window and the times.")
         return 1
     print(f"Biggest picture changes between {a.from_:.2f} s and {a.to:.2f} s, at {FPS} fps (time of the first frame that shows it):")
-    for t, d in rank_changes(diffs, a.from_, FPS, a.top):
+    for t, d in rank_changes(diffs, t0, FPS, a.top):
         print(f"  {t:.3f} s   {d:.2f}% of the picture changed")
     print(f"It starts to move at {start:.3f} s (the first frame over a tenth of the biggest change).")
     print("Use the moment the picture shows as --sync-before or --sync-after, not a step's logged time.")
